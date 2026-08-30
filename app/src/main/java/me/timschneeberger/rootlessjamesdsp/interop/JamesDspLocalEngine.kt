@@ -49,25 +49,58 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         }
     }
 
+    @Volatile
+    private var currentDspGain = 1.0f
+
     fun processDirectFloat(input: ByteBuffer, output: ByteBuffer, frameCount: Int) {
-        if (!enabled || handle == 0L || isDisposed.get()) {
+        val targetGain = if (enabled && handle != 0L && !isDisposed.get()) 1.0f else 0.0f
+
+        if (targetGain == 0.0f && currentDspGain <= 0.0001f) {
+            currentDspGain = 0.0f
             input.position(0)
             output.position(0)
             output.put(input)
             input.position(0)
             output.position(0)
-        } else {
-            synchronized(processLock) {
-                if (handle != 0L && !isDisposed.get()) {
-                    JamesDspWrapper.processDirectBuffer(handle, input, output, frameCount)
+            return
+        }
+
+        synchronized(processLock) {
+            if (handle != 0L && !isDisposed.get()) {
+                JamesDspWrapper.processDirectBuffer(handle, input, output, frameCount)
+            } else {
+                input.position(0)
+                output.position(0)
+                output.put(input)
+                input.position(0)
+                output.position(0)
+                currentDspGain = 0.0f
+                return
+            }
+        }
+
+        if (targetGain == 1.0f && currentDspGain >= 0.9999f) {
+            currentDspGain = 1.0f
+            return
+        }
+
+        // Snappy, click-free crossfade interpolation between dry input and wet processed output (~4ms)
+        val totalSamples = frameCount * 2
+        val inFloat = input.asFloatBuffer()
+        val outFloat = output.asFloatBuffer()
+        val step = (targetGain - currentDspGain).coerceIn(-1.0f, 1.0f) / 384.0f
+
+        for (i in 0 until totalSamples) {
+            if (currentDspGain != targetGain) {
+                if (targetGain > currentDspGain) {
+                    currentDspGain = (currentDspGain + kotlin.math.abs(step)).coerceAtMost(targetGain)
                 } else {
-                    input.position(0)
-                    output.position(0)
-                    output.put(input)
-                    input.position(0)
-                    output.position(0)
+                    currentDspGain = (currentDspGain - kotlin.math.abs(step)).coerceAtLeast(targetGain)
                 }
             }
+            val dry = inFloat.get(i)
+            val wet = outFloat.get(i)
+            outFloat.put(i, wet * currentDspGain + dry * (1.0f - currentDspGain))
         }
     }
 

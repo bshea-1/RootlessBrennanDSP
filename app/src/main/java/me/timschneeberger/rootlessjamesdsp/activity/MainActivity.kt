@@ -10,6 +10,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.SharedPreferences
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -65,6 +67,7 @@ import me.timschneeberger.rootlessjamesdsp.utils.extensions.AssetManagerExtensio
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.broadcastPresetLoadEvent
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.check
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.getAppName
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.isServiceRunning
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.requestIgnoreBatteryOptimizations
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.restoreDspSettings
@@ -114,7 +117,7 @@ class MainActivity : BaseActivity() {
                 processorServiceBound = true
 
                 if (isRootless())
-                    binding.powerToggle.isToggled = true
+                    binding.powerToggle.isToggled = prefsApp.get<Boolean>(R.string.key_powered_on)
             }
 
             override fun onServiceDisconnected(arg0: ComponentName) {
@@ -135,7 +138,7 @@ class MainActivity : BaseActivity() {
                 }
                 Constants.ACTION_SERVICE_STARTED -> {
                     if(isRootless())
-                        binding.powerToggle.isToggled = true
+                        binding.powerToggle.isToggled = prefsApp.get<Boolean>(R.string.key_powered_on)
                 }
             }
         }
@@ -261,20 +264,25 @@ class MainActivity : BaseActivity() {
                 }
 
                 if(SdkCheck.isQ && isRootless()) {
-                    if (binding.powerToggle.isToggled) {
-
-                        RootlessAudioProcessorService.stop(this@MainActivity)
-                        binding.powerToggle.isToggled = false
+                    if (RootlessAudioProcessorService.isRunning || processorServiceBound || processorService != null) {
+                        val newToggled = !binding.powerToggle.isToggled
+                        binding.powerToggle.isToggled = newToggled
+                        prefsApp.set(R.string.key_powered_on, newToggled)
+                        playSwitchFeedback(newToggled)
                     } else {
-
+                        binding.powerToggle.isToggled = true
+                        prefsApp.set(R.string.key_powered_on, true)
+                        playSwitchFeedback(true)
                         requestCapturePermission()
                     }
                 }
                 else if (isRoot()) {
                     when(JamesDspRemoteEngine.isPluginInstalled()) {
                         JamesDspRemoteEngine.PluginState.Available -> {
-                            binding.powerToggle.isToggled = !binding.powerToggle.isToggled
-                            prefsApp.set(R.string.key_powered_on, binding.powerToggle.isToggled)
+                            val newToggled = !binding.powerToggle.isToggled
+                            binding.powerToggle.isToggled = newToggled
+                            prefsApp.set(R.string.key_powered_on, newToggled)
+                            playSwitchFeedback(newToggled)
                         }
                         JamesDspRemoteEngine.PluginState.Unsupported -> {
                             toast(getString(R.string.version_mismatch_root_toast))
@@ -285,8 +293,10 @@ class MainActivity : BaseActivity() {
                     }
                 }
                 else if(isPlugin()) {
-                    binding.powerToggle.isToggled = !binding.powerToggle.isToggled
-                    prefsApp.set(R.string.key_powered_on, binding.powerToggle.isToggled)
+                    val newToggled = !binding.powerToggle.isToggled
+                    binding.powerToggle.isToggled = newToggled
+                    prefsApp.set(R.string.key_powered_on, newToggled)
+                    playSwitchFeedback(newToggled)
                 }
             }
         })
@@ -376,7 +386,7 @@ class MainActivity : BaseActivity() {
         if(key == getString(R.string.key_appearance_nav_hide)) {
             binding.bar.hideOnScroll = prefsApp.get(R.string.key_appearance_nav_hide)
         }
-        else if(key == getString(R.string.key_powered_on) && !hasLoadFailed && !isRootless()) {
+        else if(key == getString(R.string.key_powered_on) && !hasLoadFailed) {
             binding.powerToggle.isToggled = prefsApp.get(R.string.key_powered_on)
         }
 
@@ -754,6 +764,28 @@ class MainActivity : BaseActivity() {
 
     private fun makeSnackbar(text: String, duration: Int = Snackbar.LENGTH_SHORT): Snackbar {
         return Snackbar.make(findViewById(android.R.id.content), text, duration)
+    }
+
+    private fun playSwitchFeedback(isOn: Boolean) {
+        try {
+            val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 40)
+            if (isOn) {
+                toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 70)
+            } else {
+                toneGen.startTone(ToneGenerator.TONE_PROP_NACK, 70)
+            }
+            java.util.Timer().schedule(object : java.util.TimerTask() {
+                override fun run() {
+                    try {
+                        toneGen.release()
+                    } catch (_: Exception) {}
+                }
+            }, 120)
+        } catch (_: Exception) {}
+
+        makeSnackbar(
+            if (isOn) "🎧 BrennanDSP Processing Enabled" else "⚪ BrennanDSP Passthrough (Off)"
+        ).show()
     }
 
     private fun quitGracefully() {

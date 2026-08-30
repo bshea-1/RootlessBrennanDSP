@@ -14,6 +14,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
+import android.media.AudioRouting
 import android.media.AudioTrack
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -27,6 +28,8 @@ import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
 import androidx.lifecycle.Observer
 import androidx.lifecycle.asLiveData
+import me.timschneeberger.rootlessjamesdsp.audio.SpscAudioRingBuffer
+import java.util.concurrent.locks.LockSupport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import me.timschneeberger.rootlessjamesdsp.BuildConfig
@@ -82,10 +85,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var mediaProjectionStartIntent: Intent? = null
 
     private var recreateRecorderRequested = false
-    private var recorderThread: Thread? = null
+    private var captureThread: Thread? = null
+    private var playbackThread: Thread? = null
+    private var ringBuffer: SpscAudioRingBuffer? = null
     private lateinit var engine: JamesDspLocalEngine
-    private val isRunning: Boolean
-        get() = recorderThread != null
+    private val isAudioStreaming: Boolean
+        get() = captureThread != null || playbackThread != null
 
     private lateinit var sessionManager: RootlessSessionManager
     private var sessionLossRetryCount = 0
@@ -108,13 +113,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val blockedAppRepository by lazy { AppBlocklistRepository(blockedAppDatabase.appBlocklistDao()) }
     private val blockedApps by lazy { blockedAppRepository.blocklist.asLiveData() }
     private val blockedAppObserver = Observer<List<BlockedApp>?> {
-        Timber.d("blockedAppObserver: Database changed; ignored=${!isRunning}")
-        if(isRunning)
+        Timber.d("blockedAppObserver: Database changed; ignored=${!isAudioStreaming}")
+        if(isAudioStreaming)
             recreateRecorderRequested = true
     }
 
     override fun onCreate() {
         super.onCreate()
+        RootlessAudioProcessorService.isRunning = true
 
         audioManager = getSystemService<AudioManager>()!!
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
@@ -143,6 +149,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         registerLocalReceiver(broadcastReceiver, filter)
 
         preferences.registerOnSharedPreferenceChangeListener(preferencesListener)
+        loadFromPreferences(getString(R.string.key_powered_on))
         loadFromPreferences(getString(R.string.key_powersave_suspend))
         loadFromPreferences(getString(R.string.key_session_exclude_restricted))
 
@@ -177,7 +184,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
         }
 
-        if (isRunning) {
+        if (isAudioStreaming) {
             return START_NOT_STICKY
         }
 
@@ -213,6 +220,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     override fun onDestroy() {
+        RootlessAudioProcessorService.isRunning = false
         isServiceDisposing = true
 
         stopRecording()
@@ -463,6 +471,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     private fun loadFromPreferences(key: String?){
         when (key) {
+            getString(R.string.key_powered_on) -> {
+                val isPoweredOn = preferences.get<Boolean>(R.string.key_powered_on)
+                Timber.d("RootlessAudioProcessorService: powered_on set to $isPoweredOn")
+                engine.enabled = isPoweredOn
+            }
             getString(R.string.key_powersave_suspend) -> {
                 suspendOnIdle = preferences.get<Boolean>(R.string.key_powersave_suspend)
                 Timber.d("Suspend on idle set to $suspendOnIdle")
@@ -521,15 +534,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         val minTrackBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, encodingFormat)
         val minRecBuf = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_STEREO, encodingFormat)
 
-        // Hardware buffer: 3× minimum — enough headroom without adding latency.
-        // The partial-write loop prevents data loss, so we don't need massive buffers.
-        val recHwBuf = maxOf(minRecBuf * 3, bufferSizeBytes * 4)
-        val trackHwBuf = maxOf(minTrackBuf * 3, bufferSizeBytes * 4)
+        // Hardware buffer: 2× minimum — optimal headroom without latency bloating
+        val recHwBuf = maxOf(minRecBuf * 2, bufferSizeBytes * 4)
+        val trackHwBuf = maxOf(minTrackBuf * 2, bufferSizeBytes * 4)
 
         Timber.i("Sample rate: $sampleRate; Encoding: ${encoding.name}; " +
                 "Chunk frames: $framesPerChunk; Chunk bytes: $bufferSizeBytes; " +
                 "Track HW Buf: $trackHwBuf; Rec HW Buf: $recHwBuf; " +
                 "HAL burst frames: $halBurstFrames")
+
+        val ring = SpscAudioRingBuffer(slotCount = 16, chunkSizeBytes = bufferSizeBytes)
+        ringBuffer = ring
 
         var recorder: AudioRecord
         val track: AudioTrack
@@ -538,8 +553,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             track = buildAudioTrack(encodingFormat, sampleRate, trackHwBuf)
         }
         catch(ex: Exception) {
-            Timber.e("Failed to create initial audio record/track")
-            Timber.e(ex)
+            Timber.e("Failed to create initial audio record/track: $ex")
             stopSelf()
             return
         }
@@ -549,193 +563,260 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             engine.sampleRate = sampleRate.toFloat()
         }
 
-        recorderThread = Thread {
-            try {
-                Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        val routingChanged = java.util.concurrent.atomic.AtomicBoolean(false)
+        val routingListener = AudioRouting.OnRoutingChangedListener { routing ->
+            Timber.i("AudioTrack routing changed (device: ${routing.routedDevice?.type}); requesting buffer flush to eliminate latency drift")
+            routingChanged.set(true)
+        }
+        track.addOnRoutingChangedListener(routingListener, Handler(Looper.getMainLooper()))
 
-                ServiceNotificationHelper.pushServiceNotification(
-                    applicationContext,
-                    notificationSessions,
-                )
+        isProcessorDisposing = false
 
-                val directInBuf = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
-                val directOutBuf = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
-                val shortBuffer = ShortArray(bufferElements)
-                val shortOutBuffer = ShortArray(bufferElements)
+        // Producer Thread: Capture raw PCM from AudioRecord into SPSC lock-free ring buffer
+        captureThread = Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+            recorder.startRecording()
 
-                recorder.startRecording()
-                // Fade-in ramp: 30ms worth of stereo samples for smooth transition
-                val totalFadeInSamples = (sampleRate * 0.030).toInt() * 2
-                var fadeInSamplesRemaining = totalFadeInSamples
-
-                while (!isProcessorDisposing) {
-                    if(recreateRecorderRequested) {
-                        Timber.d("Recreating AudioRecord due to permission grant")
-                        recreateRecorderRequested = false
-                        try {
-                            recorder.stop()
-                            recorder.release()
-                        } catch (e: Exception) {
-                            Timber.e(e, "Error releasing old recorder")
-                        }
-                        try {
-                            recorder = buildAudioRecord(encodingFormat, sampleRate, recHwBuf)
-                            recorder.startRecording()
-                            fadeInSamplesRemaining = totalFadeInSamples
-                            if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                                track.pause()
-                                track.flush()
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to recreate recorder")
-                        }
+            while (!isProcessorDisposing) {
+                if (recreateRecorderRequested) {
+                    Timber.d("Recreating AudioRecord due to permission grant")
+                    recreateRecorderRequested = false
+                    try {
+                        recorder.stop()
+                        recorder.release()
+                    } catch (e: Exception) {
+                        Timber.e(e, "Error releasing old recorder")
                     }
-                    if (mediaProjection == null) {
-                        Timber.e("Media projection handle is null, stopping service")
-                        stopSelf()
-                        return@Thread
-                    }
-
-                    if(isProcessorIdle && suspendOnIdle)
-                    {
-                        if(recorder.state == AudioRecord.STATE_INITIALIZED &&
-                            recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
-                            recorder.stop()
-                        if(track.state == AudioTrack.STATE_INITIALIZED &&
-                            track.playState != AudioTrack.PLAYSTATE_STOPPED)
-                            track.stop()
-
-                        try {
-                            Thread.sleep(50)
-                        }
-                        catch(e: InterruptedException) {
-                            break
-                        }
-                        continue
-                    }
-
-                    if(recorder.state == AudioRecord.STATE_INITIALIZED && recorder.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
+                    try {
+                        recorder = buildAudioRecord(encodingFormat, sampleRate, recHwBuf)
                         recorder.startRecording()
-                    }
-                    // Start playback immediately — the fade-in ramp handles the transition
-                    if(track.state == AudioTrack.STATE_INITIALIZED && track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                        track.play()
-                        Timber.d("AudioTrack playing (low-latency start)")
-                    }
-
-                    if(encoding == AudioEncoding.PcmShort) {
-                        val readShorts = recorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
-                        if (readShorts > 0) {
-                            val validShorts = readShorts - (readShorts % 2)
-                            engine.processInt16(shortBuffer, shortOutBuffer)
-
-                            // Apply fade-in ramp for smooth transition on startup
-                            if (fadeInSamplesRemaining > 0) {
-                                for (i in 0 until validShorts) {
-                                    val sampleIndex = totalFadeInSamples - fadeInSamplesRemaining + i
-                                    if (sampleIndex < totalFadeInSamples) {
-                                        val gain = sampleIndex.toFloat() / totalFadeInSamples
-                                        shortOutBuffer[i] = (shortOutBuffer[i] * gain).toInt().toShort()
-                                    }
-                                }
-                                fadeInSamplesRemaining = (fadeInSamplesRemaining - validShorts).coerceAtLeast(0)
-                            }
-
-                            directOutBuf.clear()
-                            directOutBuf.asShortBuffer().put(shortOutBuffer, 0, validShorts)
-                            directOutBuf.position(0)
-                            directOutBuf.limit(validShorts * Short.SIZE_BYTES)
-                            var bytesRemaining = validShorts * Short.SIZE_BYTES
-                            while (bytesRemaining > 0 && !isProcessorDisposing) {
-                                val written = track.write(directOutBuf, bytesRemaining, AudioTrack.WRITE_BLOCKING)
-                                if (written > 0) {
-                                    bytesRemaining -= written
-                                } else {
-                                    Timber.e("AudioTrack write short error: $written")
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    else {
-                        directInBuf.clear()
-                        val readStartNs = System.nanoTime()
-                        val readBytes = recorder.read(directInBuf, bufferSizeBytes, AudioRecord.READ_BLOCKING)
-                        val readMs = (System.nanoTime() - readStartNs) / 1_000_000L
-                        if (readMs > 20) Timber.w("Slow capture read: ${readMs}ms ($readBytes bytes)")
-                        if (readBytes <= 0) { Timber.e("AudioRecord read returned error: $readBytes") }
-                        if (readBytes > 0) {
-                            val frameCount = readBytes / (2 * Float.SIZE_BYTES)
-                            val validBytes = frameCount * (2 * Float.SIZE_BYTES)
-                            if (validBytes > 0) {
-                                directInBuf.position(0)
-                                directOutBuf.clear()
-                                directOutBuf.position(0)
-                                engine.processDirectFloat(directInBuf, directOutBuf, frameCount)
-
-                                // Apply fade-in ramp for smooth transition on startup
-                                if (fadeInSamplesRemaining > 0) {
-                                    val floatView = directOutBuf.asFloatBuffer()
-                                    val totalFloats = frameCount * 2
-                                    for (i in 0 until totalFloats) {
-                                        val sampleIndex = totalFadeInSamples - fadeInSamplesRemaining + i
-                                        if (sampleIndex < totalFadeInSamples) {
-                                            val gain = sampleIndex.toFloat() / totalFadeInSamples
-                                            floatView.put(i, floatView.get(i) * gain)
-                                        }
-                                    }
-                                    fadeInSamplesRemaining = (fadeInSamplesRemaining - totalFloats).coerceAtLeast(0)
-                                }
-
-                                directOutBuf.position(0)
-                                directOutBuf.limit(validBytes)
-                                val writeStartNs = System.nanoTime()
-                                var bytesRemaining = validBytes
-                                while (bytesRemaining > 0 && !isProcessorDisposing) {
-                                    val written = track.write(directOutBuf, bytesRemaining, AudioTrack.WRITE_BLOCKING)
-                                    if (written > 0) {
-                                        bytesRemaining -= written
-                                    } else {
-                                        Timber.e("AudioTrack write float error: $written")
-                                        break
-                                    }
-                                }
-                                val writeMs = (System.nanoTime() - writeStartNs) / 1_000_000L
-                                if (writeMs > 20) Timber.w("Slow track write: ${writeMs}ms")
-                            }
-                        }
+                        ring.flush()
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to recreate recorder")
                     }
                 }
-            } catch (e: IOException) {
-                Timber.w(e)
-            } catch (e: Exception) {
-                Timber.e("Exception in recorderThread raised")
-                Timber.e(e)
-                stopSelf()
-            } finally {
-                
 
-                if(recorder.state != AudioRecord.STATE_UNINITIALIZED) {
+                if (mediaProjection == null) {
+                    Timber.e("Media projection handle is null, stopping service")
+                    stopSelf()
+                    break
+                }
+
+                if (isProcessorIdle && suspendOnIdle) {
+                    if (recorder.state == AudioRecord.STATE_INITIALIZED &&
+                        recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                        recorder.stop()
+                    }
+                    try {
+                        Thread.sleep(50)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                    continue
+                }
+
+                if (recorder.state == AudioRecord.STATE_INITIALIZED &&
+                    recorder.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
+                    recorder.startRecording()
+                }
+
+                val writeBuf = ring.acquireWriteBuffer()
+                if (writeBuf != null) {
+                    val readBytes = recorder.read(writeBuf, bufferSizeBytes, AudioRecord.READ_BLOCKING)
+                    if (readBytes > 0) {
+                        ring.commitWrite(readBytes)
+                    } else if (readBytes < 0) {
+                        Timber.w("AudioRecord read error: $readBytes")
+                    }
+                } else {
+                    // Buffer is full (consumer delayed) -> trim oldest slots to enforce minimal latency
+                    ring.trimToWatermark(2)
+                }
+            }
+
+            try {
+                if (recorder.state != AudioRecord.STATE_UNINITIALIZED) {
                     recorder.stop()
                 }
-                if(track.state != AudioTrack.STATE_UNINITIALIZED) {
-                    track.stop()
+                recorder.release()
+            } catch (_: Exception) {}
+        }, "BrennanDSP-Capture")
+
+        // Consumer Thread: Read from SPSC ring buffer, apply JamesDSP NEON processing & render to AudioTrack
+        playbackThread = Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+
+            ServiceNotificationHelper.pushServiceNotification(
+                applicationContext,
+                notificationSessions,
+            )
+
+            val directOutBuf = ByteBuffer.allocateDirect(bufferSizeBytes).order(ByteOrder.nativeOrder())
+            val shortBuffer = ShortArray(bufferElements)
+            val shortOutBuffer = ShortArray(bufferElements)
+
+            // Fade-in ramp: 30ms worth of stereo samples for smooth transition
+            val totalFadeInSamples = (sampleRate * 0.030).toInt() * 2
+            var fadeInSamplesRemaining = totalFadeInSamples
+            var processedChunkCount = 0L
+            var preRolled = false
+
+            while (!isProcessorDisposing) {
+                if (routingChanged.compareAndSet(true, false)) {
+                    Timber.i("Audio routing changed: flushing ring buffer and AudioTrack to maintain zero latency")
+                    ring.flush()
+                    if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                        track.pause()
+                        track.flush()
+                    }
+                    preRolled = false
+                    fadeInSamplesRemaining = totalFadeInSamples
                 }
 
-                recorder.release()
-                track.release()
+                if (isProcessorIdle && suspendOnIdle) {
+                    if (track.state == AudioTrack.STATE_INITIALIZED &&
+                        track.playState != AudioTrack.PLAYSTATE_STOPPED) {
+                        track.stop()
+                    }
+                    preRolled = false
+                    try {
+                        Thread.sleep(50)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                    continue
+                }
+
+                // Initial Pre-Roll: wait for 2 chunks (~8ms headroom) to prevent underruns/static noise
+                if (!preRolled) {
+                    if (ring.availableToRead() < 2) {
+                        LockSupport.parkNanos(200_000) // 0.2ms
+                        continue
+                    }
+                    preRolled = true
+                    if (track.state == AudioTrack.STATE_INITIALIZED &&
+                        track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                        track.play()
+                        Timber.d("AudioTrack playing (low-latency pre-rolled start)")
+                    }
+                }
+
+                val inBuf = ring.acquireReadBuffer()
+                if (inBuf == null) {
+                    // Ring buffer temporarily empty -> sub-millisecond park to avoid CPU spin
+                    LockSupport.parkNanos(200_000) // 0.2ms
+                    continue
+                }
+
+                val validBytes = inBuf.remaining()
+
+                if (encoding == AudioEncoding.PcmShort) {
+                    val inShortBuf = inBuf.asShortBuffer()
+                    val totalShorts = validBytes / Short.SIZE_BYTES
+                    val validShorts = totalShorts - (totalShorts % 2)
+                    inShortBuf.get(shortBuffer, 0, validShorts)
+                    engine.processInt16(shortBuffer, shortOutBuffer)
+
+                    if (fadeInSamplesRemaining > 0) {
+                        for (i in 0 until validShorts) {
+                            val sampleIndex = totalFadeInSamples - fadeInSamplesRemaining + i
+                            if (sampleIndex < totalFadeInSamples) {
+                                val gain = sampleIndex.toFloat() / totalFadeInSamples
+                                shortOutBuffer[i] = (shortOutBuffer[i] * gain).toInt().toShort()
+                            }
+                        }
+                        fadeInSamplesRemaining = (fadeInSamplesRemaining - validShorts).coerceAtLeast(0)
+                    }
+
+                    directOutBuf.clear()
+                    directOutBuf.asShortBuffer().put(shortOutBuffer, 0, validShorts)
+                    directOutBuf.position(0)
+                    directOutBuf.limit(validShorts * Short.SIZE_BYTES)
+
+                    var bytesRemaining = validShorts * Short.SIZE_BYTES
+                    while (bytesRemaining > 0 && !isProcessorDisposing) {
+                        val written = track.write(directOutBuf, bytesRemaining, AudioTrack.WRITE_BLOCKING)
+                        if (written > 0) {
+                            bytesRemaining -= written
+                        } else {
+                            break
+                        }
+                    }
+                } else {
+                    val frameCount = validBytes / (2 * Float.SIZE_BYTES)
+                    directOutBuf.clear()
+                    directOutBuf.position(0)
+                    engine.processDirectFloat(inBuf, directOutBuf, frameCount)
+
+                    if (fadeInSamplesRemaining > 0) {
+                        val floatView = directOutBuf.asFloatBuffer()
+                        val totalFloats = frameCount * 2
+                        for (i in 0 until totalFloats) {
+                            val sampleIndex = totalFadeInSamples - fadeInSamplesRemaining + i
+                            if (sampleIndex < totalFadeInSamples) {
+                                val gain = sampleIndex.toFloat() / totalFadeInSamples
+                                floatView.put(i, floatView.get(i) * gain)
+                            }
+                        }
+                        fadeInSamplesRemaining = (fadeInSamplesRemaining - totalFloats).coerceAtLeast(0)
+                    }
+
+                    directOutBuf.position(0)
+                    directOutBuf.limit(validBytes)
+
+                    var bytesRemaining = validBytes
+                    while (bytesRemaining > 0 && !isProcessorDisposing) {
+                        val written = track.write(directOutBuf, bytesRemaining, AudioTrack.WRITE_BLOCKING)
+                        if (written > 0) {
+                            bytesRemaining -= written
+                        } else {
+                            break
+                        }
+                    }
+                }
+
+                ring.commitRead()
+                processedChunkCount++
+
+                // Dynamic Clock Drift Monitoring: only shed frames if backlog grows excessively (>6 chunks = >25ms)
+                if ((processedChunkCount and 63L) == 0L) {
+                    val depth = ring.availableToRead()
+                    if (depth > 6) {
+                        val trimmed = ring.trimToWatermark(3)
+                        if (trimmed > 0) {
+                            Timber.d("Trimmed $trimmed drift frames to lock latency to target watermark")
+                        }
+                    }
+                }
             }
-        }
-        recorderThread!!.start()
+
+            try {
+                track.removeOnRoutingChangedListener(routingListener)
+            } catch (_: Exception) {}
+
+            try {
+                if (track.state != AudioTrack.STATE_UNINITIALIZED) {
+                    track.stop()
+                }
+                track.release()
+            } catch (_: Exception) {}
+        }, "BrennanDSP-Playback")
+
+        captureThread!!.start()
+        playbackThread!!.start()
     }
 
     fun stopRecording() {
-        if (recorderThread != null) {
-            isProcessorDisposing = true
-            recorderThread!!.interrupt()
-            recorderThread!!.join(500)
-            recorderThread = null
-        }
+        isProcessorDisposing = true
+        captureThread?.interrupt()
+        playbackThread?.interrupt()
+        try {
+            captureThread?.join(300)
+            playbackThread?.join(300)
+        } catch (_: Exception) {}
+        captureThread = null
+        playbackThread = null
+        ringBuffer = null
 
         try {
             if (wakeLock?.isHeld == true) {
@@ -869,6 +950,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     companion object {
         const val SESSION_LOSS_MAX_RETRIES = 1
+
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".rootless.service.STOP"
