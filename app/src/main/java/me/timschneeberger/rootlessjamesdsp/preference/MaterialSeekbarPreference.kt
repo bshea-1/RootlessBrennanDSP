@@ -197,7 +197,24 @@ class MaterialSeekbarPreference : Preference {
     }
 
     override fun onSetInitialValue(defaultValue: Any?) {
-        setValue(getPersistedFloat((defaultValue as? Float ?: 0f)))
+        val def = (defaultValue as? Float) ?: 0f
+        val currentVal = try {
+            getPersistedFloat(def)
+        } catch (_: Throwable) {
+            try {
+                preferenceManager.sharedPreferences?.getInt(key, def.toInt())?.toFloat() ?: def
+            } catch (_: Throwable) {
+                try {
+                    preferenceManager.sharedPreferences?.getString(key, def.toString())?.toFloatOrNull() ?: def
+                } catch (_: Throwable) {
+                    def
+                }
+            }
+        }
+        setValue(currentVal)
+        try {
+            persistFloat(currentVal)
+        } catch (_: Throwable) {}
     }
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any {

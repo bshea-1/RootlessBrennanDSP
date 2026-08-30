@@ -7,6 +7,12 @@
         android:title="@string/liveprog_enable"
         android:icon="@drawable/ic_baseline_code_tags_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_liveprog"
+            app:iconSpaceReserved="false" />
         <me.timschneeberger.rootlessjamesdsp.preference.FileLibraryPreference
             android:title="@string/liveprog_file"
             android:key="@string/key_liveprog_file"

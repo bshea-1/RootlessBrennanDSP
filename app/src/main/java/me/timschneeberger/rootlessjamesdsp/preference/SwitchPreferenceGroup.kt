@@ -34,7 +34,17 @@ class SwitchPreferenceGroup(context: Context, attrs: AttributeSet) : PreferenceG
     }
 
     override fun onSetInitialValue(defaultValue: Any?) {
-        setValueInternal(getPersistedBoolean((defaultValue as? Boolean) ?: false), true)
+        val def = (defaultValue as? Boolean) ?: false
+        val currentVal = try {
+            getPersistedBoolean(def)
+        } catch (_: Throwable) {
+            try {
+                preferenceManager.sharedPreferences?.getString(key, def.toString())?.toBooleanStrictOrNull() ?: def
+            } catch (_: Throwable) {
+                def
+            }
+        }
+        setValueInternal(currentVal, true)
     }
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any = a.getBoolean(index, false)

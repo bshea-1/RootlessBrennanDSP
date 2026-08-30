@@ -7,6 +7,12 @@
         android:title="@string/reverb_enable"
         android:icon="@drawable/ic_baseline_cube_outline_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_reverb"
+            app:iconSpaceReserved="false" />
         <ListPreference
             android:defaultValue="15"
             android:dialogTitle="@string/reverb_room_type"

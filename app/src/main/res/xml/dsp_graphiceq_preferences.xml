@@ -7,13 +7,12 @@
         android:title="@string/geq_enable"
         android:icon="@drawable/ic_baseline_chart_timeline_variant_24dp"
         app:iconSpaceReserved="false">
-        <!--<EditTextPreference
-            android:key="@string/key_geq_nodes"
-            android:defaultValue="GraphicEQ: "
-            android:dialogTitle="@string/geq_nodes"
-            android:title="@string/geq_nodes"
-            android:inputType="textMultiLine"
-            app:iconSpaceReserved="false"/>-->
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_graphiceq"
+            app:iconSpaceReserved="false" />
         <me.timschneeberger.rootlessjamesdsp.preference.GraphicEqualizerPreference
             android:key="@string/key_geq_nodes"
             android:defaultValue="GraphicEQ: "

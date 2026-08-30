@@ -7,6 +7,12 @@
         android:title="@string/tube_enable"
         android:icon="@drawable/ic_baseline_led_outline_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_tube"
+            app:iconSpaceReserved="false" />
         <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
             android:key="@string/key_tube_drive"
             android:title="@string/tube_drive"

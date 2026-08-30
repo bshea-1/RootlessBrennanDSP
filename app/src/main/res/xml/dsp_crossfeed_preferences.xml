@@ -7,6 +7,12 @@
         android:title="@string/crossfeed_enable"
         android:icon="@drawable/ic_baseline_image_filter_tilt_shift_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_crossfeed"
+            app:iconSpaceReserved="false" />
         <ListPreference
             android:title="@string/crossfeed_preset"
             android:key="@string/key_crossfeed_mode"

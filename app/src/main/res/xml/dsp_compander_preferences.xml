@@ -7,6 +7,12 @@
         android:title="@string/compander_enable"
         android:icon="@drawable/ic_baseline_arrow_collapse_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_compander"
+            app:iconSpaceReserved="false" />
         <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
             android:key="@string/key_compander_timeconstant"
             android:title="@string/compander_timeconstant"

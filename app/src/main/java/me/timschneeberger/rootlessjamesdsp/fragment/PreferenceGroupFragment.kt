@@ -64,11 +64,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when(intent?.action) {
-                Constants.ACTION_PRESET_LOADED -> {
-                    val id = this@PreferenceGroupFragment.id
-                    Timber.d("Reloading group fragment for ${this@PreferenceGroupFragment.preferenceManager.sharedPreferencesName}")
-                    (requireParentFragment() as DspFragment).restartFragment(id, cloneInstance(this@PreferenceGroupFragment))
-                }
                 Constants.ACTION_REPORT_SAMPLE_RATE -> {
                     reportedProcessingSampleRate = intent
                         .getFloatExtra(Constants.EXTRA_SAMPLE_RATE, 0f)
@@ -94,7 +89,6 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         addPreferencesFromResource(args.getInt(BUNDLE_XML_RES))
 
         requireContext().registerLocalReceiver(receiver, IntentFilter().apply {
-            addAction(Constants.ACTION_PRESET_LOADED)
             addAction(Constants.ACTION_REPORT_SAMPLE_RATE)
         })
 

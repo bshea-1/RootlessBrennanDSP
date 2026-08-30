@@ -35,6 +35,11 @@ class ParametricEqBandList : ObservableArrayList<ParametricEqBand>() {
     fun deserialize(str: String) {
         this.clear()
 
+        if (str.contains("Filter", ignoreCase = true) && str.contains("Fc", ignoreCase = true)) {
+            fromApoString(str)
+            return
+        }
+
         str.replace("PEQ:", "")
             .replace("\n", " ")
             .split(";")

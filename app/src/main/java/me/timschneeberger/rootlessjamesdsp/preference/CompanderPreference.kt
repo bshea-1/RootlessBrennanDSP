@@ -39,7 +39,11 @@ class CompanderPreference : DialogPreference {
     }
 
     override fun onSetInitialValue(defaultValue: Any?) {
-        initialValue = getPersistedString(defaultValue as? String ?: "")
+        initialValue = try {
+            getPersistedString(defaultValue as? String ?: "")
+        } catch (_: Throwable) {
+            defaultValue as? String ?: ""
+        }
     }
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any {
@@ -54,7 +58,11 @@ class CompanderPreference : DialogPreference {
     }
 
     fun updateFromPreferences() {
-        initialValue = getPersistedString(initialValue)
+        initialValue = try {
+            getPersistedString(initialValue)
+        } catch (_: Throwable) {
+            initialValue
+        }
         setEqualizerViewValues(initialValue)
     }
 

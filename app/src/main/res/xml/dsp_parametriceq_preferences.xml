@@ -7,6 +7,12 @@
         android:title="@string/peq_enable"
         android:icon="@drawable/ic_baseline_equalizer_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_parametriceq"
+            app:iconSpaceReserved="false" />
         <me.timschneeberger.rootlessjamesdsp.preference.ParametricEqualizerPreference
             android:key="@string/key_peq_bands"
             android:defaultValue="PEQ: "

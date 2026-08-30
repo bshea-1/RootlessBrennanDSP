@@ -65,7 +65,11 @@ class EqualizerPreference : DialogPreference, SharedPreferences.OnSharedPreferen
     }
 
     override fun onSetInitialValue(defaultValue: Any?) {
-        initialValue = getPersistedString(defaultValue as? String ?: "")
+        initialValue = try {
+            getPersistedString(defaultValue as? String ?: "")
+        } catch (_: Throwable) {
+            defaultValue as? String ?: ""
+        }
     }
 
     override fun onGetDefaultValue(a: TypedArray, index: Int): Any {
@@ -81,7 +85,11 @@ class EqualizerPreference : DialogPreference, SharedPreferences.OnSharedPreferen
     }
 
     fun updateFromPreferences() {
-        initialValue = getPersistedString(initialValue)
+        initialValue = try {
+            getPersistedString(initialValue)
+        } catch (_: Throwable) {
+            initialValue
+        }
         setEqualizerViewValues(initialValue)
         updateFilterType()
     }

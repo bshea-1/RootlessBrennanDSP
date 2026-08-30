@@ -69,8 +69,28 @@ class PreferenceCache(val context: Context) {
             val current: T = when(type) {
                 Boolean::class -> prefs.getBoolean(name, default as Boolean) as T
                 String::class -> prefs.getString(name, default as String) as T
-                Int::class -> prefs.getInt(name, default as Int) as T
-                Float::class -> prefs.getFloat(name, default as Float) as T
+                Int::class -> {
+                    try {
+                        prefs.getInt(name, default as Int) as T
+                    } catch (_: Exception) {
+                        try {
+                            prefs.getFloat(name, (default as Int).toFloat()).toInt() as T
+                        } catch (_: Exception) {
+                            (prefs.getString(name, default.toString())?.toIntOrNull() ?: default) as T
+                        }
+                    }
+                }
+                Float::class -> {
+                    try {
+                        prefs.getFloat(name, default as Float) as T
+                    } catch (_: Exception) {
+                        try {
+                            prefs.getInt(name, (default as Float).toInt()).toFloat() as T
+                        } catch (_: Exception) {
+                            (prefs.getString(name, default.toString())?.toFloatOrNull() ?: default) as T
+                        }
+                    }
+                }
                 else -> throw IllegalArgumentException("Unknown type")
             }
             return current

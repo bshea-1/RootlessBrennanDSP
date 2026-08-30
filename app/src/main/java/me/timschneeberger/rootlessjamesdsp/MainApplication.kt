@@ -136,6 +136,7 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         }
 
         Notifications.createChannels(this)
+        sanitizePreferences(this)
 
         try {
             rikka.shizuku.Shizuku.addBinderReceivedListenerSticky {
@@ -301,6 +302,43 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
             CrashlyticsImpl.log("[${priorityAsString(priority)}] ${tag ?: "???"}: $message")
             t?.takeIf { priority >= Log.WARN }?.let(CrashlyticsImpl::recordException)
+        }
+    }
+
+    private fun sanitizePreferences(context: Context) {
+        val floatKeys = mapOf(
+            Constants.PREF_BASS to listOf("bass_max_gain"),
+            Constants.PREF_TUBE to listOf("tube_drive"),
+            Constants.PREF_STEREOWIDE to listOf("stereowide_mode"),
+            Constants.PREF_COMPANDER to listOf("compander_timeconstant", "compander_granularity"),
+            Constants.PREF_OUTPUT to listOf("limiter_threshold", "limiter_release", "output_postgain")
+        )
+
+        for ((namespace, keys) in floatKeys) {
+            try {
+                val prefs = context.getSharedPreferences(namespace, Context.MODE_PRIVATE)
+                val all = prefs.all
+                val editor = prefs.edit()
+                var changed = false
+                for (key in keys) {
+                    val value = all[key]
+                    if (value != null && value !is Float) {
+                        val floatVal = when (value) {
+                            is Number -> value.toFloat()
+                            is String -> value.toFloatOrNull() ?: 0f
+                            else -> 0f
+                        }
+                        editor.remove(key)
+                        editor.putFloat(key, floatVal)
+                        changed = true
+                    }
+                }
+                if (changed) {
+                    editor.commit()
+                }
+            } catch (e: Throwable) {
+                Timber.w(e, "Error sanitizing preferences for namespace '$namespace'")
+            }
         }
     }
 

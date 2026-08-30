@@ -57,4 +57,8 @@
         <attr name="helperText" format="string" />
         <attr name="helperTextEnabled" format="boolean" />
     </declare-styleable>
+
+    <declare-styleable name="EffectPresetPreference">
+        <attr name="effectNamespace" format="string" />
+    </declare-styleable>
 </resources>

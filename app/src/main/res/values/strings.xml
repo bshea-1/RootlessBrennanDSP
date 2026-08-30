@@ -718,4 +718,30 @@ Tap on \'Tutorial\' below for detailed instructions.</string>
     <string name="android_15_screenshare_keyguard_warning">Android 15 introduces a restriction that stops screen sharing when the device is locked. To workaround this issue, the \'PROJECT_MEDIA\' permission must be granted using Shizuku or ADB.
 
 Please press \'Continue\' below to re-do the setup wizard.</string>
+
+    <!-- Effect Presets -->
+    <string name="effect_presets">Presets</string>
+    <string name="effect_presets_summary">Load or save effect presets</string>
+    <string name="preset_select_title">Select Preset</string>
+    <string name="preset_section_builtin">Built-in</string>
+    <string name="preset_section_user">Your Presets</string>
+    <string name="preset_save_current">Save Current</string>
+    <string name="preset_save_title">Save Preset</string>
+    <string name="preset_save_action">Save</string>
+    <string name="preset_name_hint">Preset name</string>
+    <string name="preset_name_empty">Please enter a preset name</string>
+    <string name="preset_saved">Preset \'%1$s\' saved</string>
+    <string name="preset_save_error">Failed to save preset</string>
+    <string name="preset_applied">Preset \'%1$s\' applied</string>
+    <string name="preset_deleted">Preset \'%1$s\' deleted</string>
+    <string name="preset_action_load">Load</string>
+    <string name="preset_action_delete">Delete</string>
+    <string name="preset_delete_confirm_title">Delete Preset</string>
+    <string name="preset_delete_confirm_message">Delete preset \'%1$s\'? This cannot be undone.</string>
+    <string name="preset_none_available">No presets available. Tap \'Save Current\' to create one.</string>
+    <string name="preset_global_select_title">Global Presets</string>
+    <string name="preset_global_section_builtin">Built-in Profiles</string>
+    <string name="preset_global_section_user">Your Presets</string>
+    <string name="preset_global_applied">Global preset \'%1$s\' applied</string>
+
 </resources>

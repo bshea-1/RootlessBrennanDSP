@@ -7,6 +7,12 @@
         android:title="@string/stereowide_enable"
         android:icon="@drawable/ic_baseline_cone_24dp"
         app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.EffectPresetPreference
+            android:key="@string/key_effect_presets"
+            android:title="@string/effect_presets"
+            android:summary="@string/effect_presets_summary"
+            app:effectNamespace="dsp_stereowide"
+            app:iconSpaceReserved="false" />
         <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
             android:title="@string/stereowide_level"
             android:key="@string/key_stereowide_mode"

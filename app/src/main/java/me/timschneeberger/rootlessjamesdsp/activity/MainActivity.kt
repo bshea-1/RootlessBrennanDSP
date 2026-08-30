@@ -17,8 +17,12 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.PersistableBundle
 import android.view.HapticFeedbackConstants
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -48,6 +52,7 @@ import me.timschneeberger.rootlessjamesdsp.fragment.LibraryLoadErrorFragment
 import me.timschneeberger.rootlessjamesdsp.interop.JamesDspRemoteEngine
 import me.timschneeberger.rootlessjamesdsp.interop.JamesDspWrapper
 import me.timschneeberger.rootlessjamesdsp.model.ProcessorMessage
+import me.timschneeberger.rootlessjamesdsp.model.preset.BuiltInPresets
 import me.timschneeberger.rootlessjamesdsp.model.preset.Preset
 import me.timschneeberger.rootlessjamesdsp.preference.FileLibraryPreference
 import me.timschneeberger.rootlessjamesdsp.service.BaseAudioProcessorService
@@ -145,7 +150,7 @@ class MainActivity : BaseActivity() {
         }
 
         val firstBoot = prefsVar.get<Boolean>(R.string.key_first_boot)
-        assets.installPrivateAssets(this, force = firstBoot)
+        assets.installPrivateAssets(this, force = false)
 
         mediaProjectionManager = getSystemService<MediaProjectionManager>()!!
         binding = ActivityDspMainBinding.inflate(layoutInflater)
@@ -219,19 +224,7 @@ class MainActivity : BaseActivity() {
                     true
                 }
                 R.id.action_presets -> {
-                    if (presetDialogHost == null) {
-                        Timber.d("Initialize preset dialog host")
-                        presetDialogHost = FakePresetFragment.newInstance()
-                        supportFragmentManager.beginTransaction()
-                            .add(R.id.dsp_fragment_container, presetDialogHost!!)
-                            .commitNow()
-                    }
-                    presetDialogHost?.pref?.refresh()
-
-                    val dialogFragment = FileLibraryDialogFragment.newInstance("presets")
-                    @Suppress("DEPRECATION")
-                    dialogFragment.setTargetFragment(presetDialogHost, 0)
-                    dialogFragment.show(supportFragmentManager, null)
+                    showGlobalPresetsDialog()
                     true
                 }
                 R.id.action_revert -> {
@@ -768,6 +761,55 @@ class MainActivity : BaseActivity() {
         Timer().schedule(2000){
             this@MainActivity.finishAndRemoveTask()
         }
+    }
+
+    private fun showGlobalPresetsDialog() {
+        val builtInGlobal = BuiltInPresets.globalPresets
+
+        val adapter = object : ArrayAdapter<BuiltInPresets.GlobalPresetEntry>(
+            this,
+            R.layout.item_global_preset,
+            builtInGlobal
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = convertView ?: layoutInflater.inflate(R.layout.item_global_preset, parent, false)
+                val item = getItem(position) ?: return view
+                view.findViewById<TextView>(R.id.preset_title).text = item.name
+                view.findViewById<TextView>(R.id.preset_description).text = item.description
+                return view
+            }
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.preset_global_select_title)
+            .setAdapter(adapter) { _, which ->
+                val preset = builtInGlobal[which]
+                BuiltInPresets.applyGlobalPreset(this, preset)
+                broadcastPresetLoadEvent()
+                dspFragment.reloadAllCards()
+                toast(getString(R.string.preset_global_applied, preset.name), false)
+            }
+            .setNeutralButton(R.string.preset_global_section_user) { _, _ ->
+                openUserPresetsDialog()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openUserPresetsDialog() {
+        if (presetDialogHost == null) {
+            Timber.d("Initialize preset dialog host")
+            presetDialogHost = FakePresetFragment.newInstance()
+            supportFragmentManager.beginTransaction()
+                .add(R.id.dsp_fragment_container, presetDialogHost!!)
+                .commitNow()
+        }
+        presetDialogHost?.pref?.refresh()
+
+        val dialogFragment = FileLibraryDialogFragment.newInstance("presets")
+        @Suppress("DEPRECATION")
+        dialogFragment.setTargetFragment(presetDialogHost, 0)
+        dialogFragment.show(supportFragmentManager, null)
     }
 
     class FakePresetFragment : Fragment(), TargetFragment {

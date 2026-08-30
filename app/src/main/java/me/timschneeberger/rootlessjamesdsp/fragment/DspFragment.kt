@@ -1,7 +1,10 @@
 package me.timschneeberger.rootlessjamesdsp.fragment
 
 import android.animation.LayoutTransition
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
@@ -16,6 +19,8 @@ import kotlinx.coroutines.launch
 import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.databinding.FragmentDspBinding
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.registerLocalReceiver
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import me.timschneeberger.rootlessjamesdsp.utils.preferences.Preferences
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -29,9 +34,28 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     private var updateNoticeOnClick: (() -> Unit)? = null
     private var updateNoticeOnCloseClick: (() -> Unit)? = null
 
+    private val presetReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Constants.ACTION_PRESET_LOADED) {
+                Timber.d("DspFragment: Reloading all DSP cards due to ACTION_PRESET_LOADED")
+                reloadAllCards()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         prefsApp.registerOnSharedPreferenceChangeListener(this)
         super.onCreate(savedInstanceState)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        requireContext().registerLocalReceiver(presetReceiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        requireContext().unregisterLocalReceiver(presetReceiver)
     }
 
     override fun onDestroy() {
@@ -69,6 +93,16 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         transition.enableTransitionType(LayoutTransition.CHANGING)
         binding.cardContainer.layoutTransition = transition
 
+        loadAllCards()
+
+        arrayOf(R.string.key_device_profiles_enable).forEach {
+            onSharedPreferenceChanged(null, getString(it))
+        }
+
+        return binding.root
+    }
+
+    private fun loadAllCards() {
         childFragmentManager.beginTransaction()
             .replace(R.id.card_device_profiles, DeviceProfilesCardFragment.newInstance())
             .replace(
@@ -124,12 +158,15 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_reverb_preferences
                 ))
             .commit()
+    }
 
-        arrayOf(R.string.key_device_profiles_enable).forEach {
-            onSharedPreferenceChanged(null, getString(it))
+    fun reloadAllCards() {
+        if (!isAdded || isStateSaved) return
+        try {
+            loadAllCards()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to reload all cards in DspFragment")
         }
-
-        return binding.root
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {

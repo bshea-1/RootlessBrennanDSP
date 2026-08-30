@@ -49,7 +49,11 @@ class FileLibraryPreference(context: Context, attrs: AttributeSet?) :
 
     override fun onSetInitialValue(defaultValue: Any?) {
 
-        val init = getPersistedString((defaultValue as? String) ?: "")
+        val init = try {
+            getPersistedString((defaultValue as? String) ?: "")
+        } catch (_: Throwable) {
+            (defaultValue as? String) ?: ""
+        }
         value = if(init.startsWith("/"))
             File(init).toRelativeString(context.getExternalFilesDir(null)!!)
         else
