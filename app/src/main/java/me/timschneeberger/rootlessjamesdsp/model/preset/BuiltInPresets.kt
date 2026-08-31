@@ -259,32 +259,32 @@ object BuiltInPresets {
             "Transparent Dynamic Smoothing",
             "Gentle multiband leveling without altering perceived loudness",
             mapOf(
-                "compander_enable" to "true", "compander_timeconstant" to "0.22", "compander_granularity" to "1", "compander_tftransforms" to "0",
-                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-1;-1;-1;-1;-1;-1;-1"
+                "compander_enable" to "true", "compander_timeconstant" to "0.22", "compander_granularity" to "1", "compander_tftransforms" to "3",
+                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.15;-0.15;-0.15;-0.15;-0.15;-0.15;-0.15"
             )
         ),
         PresetEntry(
             "Punchy Transients",
             "Enhances dynamic impact of drums and plucked strings",
             mapOf(
-                "compander_enable" to "true", "compander_timeconstant" to "0.08", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;2;2;1;0;0;0;1"
+                "compander_enable" to "true", "compander_timeconstant" to "0.08", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;0.35;0.30;0.20;0.10;0.05;0.10;0.25"
             )
         ),
         PresetEntry(
             "Dialogue & Speech Leveler",
             "Maintains consistent vocal volume for podcasts and audiobooks",
             mapOf(
-                "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-3;-2;-1;-1;-1;-2;-2"
+                "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.30;-0.20;0.10;0.25;0.20;-0.15;-0.25"
             )
         ),
         PresetEntry(
             "Night Mode (Reduced Dynamic Range)",
             "Prevents sudden loud explosions while keeping dialogue audible",
             mapOf(
-                "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-5;-4;-3;-3;-3;-4;-4"
+                "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.55;-0.45;-0.35;-0.30;-0.30;-0.40;-0.45"
             )
         )
     )
@@ -316,6 +316,57 @@ object BuiltInPresets {
     // ═══════════════════════════════════════════════════════════════════
 
     val globalPresets: List<GlobalPresetEntry> = listOf(
+        GlobalPresetEntry(
+            "⭐ Brennan's Preset",
+            "Developer's Choice: Calibrated 15-Band EQ, PEQ + Graphic EQ Curves, Dynamic Compander, 4.5dB Vacuum Tube Warmth, and 3.0dB Bass Boost.",
+            mapOf(
+                Constants.PREF_OUTPUT to mapOf("limiter_threshold" to "-0.1", "limiter_release" to "60.0", "output_postgain" to "0.0"),
+                Constants.PREF_BASS to mapOf("bass_enable" to "true", "bass_max_gain" to "3.0"),
+                Constants.PREF_COMPANDER to mapOf(
+                    "compander_enable" to "true",
+                    "compander_timeconstant" to "0.1",
+                    "compander_granularity" to "3.0",
+                    "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.18133764266967778;-0.09223294258117676;0.0;0.1324249505996704;0.15419790744781503;0.04977893829345703;0.020433139801025346"
+                ),
+                Constants.PREF_TUBE to mapOf(
+                    "tube_enable" to "true",
+                    "tube_drive" to "4.5"
+                ),
+                Constants.PREF_EQ to mapOf(
+                    "eq_enable" to "true",
+                    "eq_filter_type" to "0",
+                    "eq_interpolation" to "0",
+                    "eq_bands" to "25.0;40.0;63.0;100.0;160.0;250.0;400.0;630.0;1000.0;1600.0;2500.0;4000.0;6300.0;10000.0;16000.0;1.7328479290008545;1.7792315483093262;1.5;1.0;0.5;0.0;0.0;0.0;0.0;0.5;1.0;1.1912627220153809;1.5607380867004395;1.1040587425231934;1.0"
+                ),
+                Constants.PREF_GEQ to mapOf(
+                    "geq_enable" to "true",
+                    "geq_nodes" to "GraphicEQ: 20 0; 50 0; 100 0; 200 0; 500 0; 1000 0.25; 2000 0.75; 5000 1; 10000 1.25; 20000 1.5; "
+                ),
+                Constants.PREF_PEQ to mapOf(
+                    "peq_enable" to "true",
+                    "peq_bands" to "PEQ: 250 -1.5 1.41 0; 1000 1 0.71 0; 2800 1 1.2 0; 6500 -1.5 1 0; ",
+                    "peq_preamp" to "0.0"
+                ),
+                Constants.PREF_CONVOLVER to mapOf(
+                    "convolver_enable" to "false",
+                    "convolver_file" to "Convolver/Atmos DAP65 surround 48000.irs",
+                    "convolver_adv_imp" to "-80;-100;0;0;0;0",
+                    "convolver_mode" to "0"
+                ),
+                Constants.PREF_STEREOWIDE to mapOf(
+                    "stereowide_enable" to "false",
+                    "stereowide_mode" to "55.0"
+                ),
+                Constants.PREF_LIVEPROG to mapOf(
+                    "liveprog_enable" to "false",
+                    "liveprog_file" to "Liveprog/Joe0Bloggs DRX10K compander-HR.eel"
+                ),
+                Constants.PREF_DDC to mapOf("ddc_enable" to "false", "ddc_file" to "DDC/FrontRearContrast.vdc"),
+                Constants.PREF_CROSSFEED to mapOf("bs2b_crossfeed_enable" to "false", "bs2b_crossfeed_mode" to "0"),
+                Constants.PREF_REVERB to mapOf("reverb_enable" to "false")
+            )
+        ),
         GlobalPresetEntry(
             "🎧 3D Spatial Audio",
             "Immersive surround sound that feels like speakers around you instead of inside your ears.",
@@ -368,8 +419,8 @@ object BuiltInPresets {
                 Constants.PREF_LIVEPROG to mapOf("liveprog_enable" to "true", "liveprog_file" to "Liveprog/viper_dynamicbass_preset.eel"),
                 Constants.PREF_BASS to mapOf("bass_enable" to "true", "bass_max_gain" to "6"),
                 Constants.PREF_COMPANDER to mapOf(
-                    "compander_enable" to "true", "compander_timeconstant" to "0.08", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;2;2;1;0;0;0;1"
+                    "compander_enable" to "true", "compander_timeconstant" to "0.08", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;0.35;0.30;0.20;0.10;0.05;0.10;0.25"
                 ),
                 Constants.PREF_PEQ to mapOf(
                     "peq_enable" to "true",
@@ -396,8 +447,8 @@ object BuiltInPresets {
                     "peq_bands" to "PEQ: 250.0 -1.5 1.41 0; 1000.0 1.0 0.71 0; 2800.0 2.5 1.20 0; 6500.0 -2.0 2.50 0; "
                 ),
                 Constants.PREF_COMPANDER to mapOf(
-                    "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-2;-1;0;0;0;-1;-1"
+                    "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.25;-0.15;0.10;0.20;0.15;-0.10;-0.20"
                 ),
                 Constants.PREF_BASS to mapOf("bass_enable" to "false"),
                 Constants.PREF_TUBE to mapOf("tube_enable" to "false"),
@@ -421,8 +472,8 @@ object BuiltInPresets {
                 Constants.PREF_REVERB to mapOf("reverb_enable" to "true", "reverb_preset" to "15"),
                 Constants.PREF_BASS to mapOf("bass_enable" to "true", "bass_max_gain" to "4"),
                 Constants.PREF_COMPANDER to mapOf(
-                    "compander_enable" to "true", "compander_timeconstant" to "0.10", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;0;0;1;1;2;1;0"
+                    "compander_enable" to "true", "compander_timeconstant" to "0.10", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;0.10;0.15;0.25;0.20;0.30;0.20;0.10"
                 ),
                 Constants.PREF_TUBE to mapOf("tube_enable" to "false"),
                 Constants.PREF_DDC to mapOf("ddc_enable" to "false"),
@@ -484,8 +535,8 @@ object BuiltInPresets {
                     "peq_bands" to "PEQ: 5800.0 -3.0 3.00 0; 7200.0 -2.5 2.50 0; 10000.0 -2.0 0.71 2; "
                 ),
                 Constants.PREF_COMPANDER to mapOf(
-                    "compander_enable" to "true", "compander_timeconstant" to "0.22", "compander_granularity" to "1", "compander_tftransforms" to "0",
-                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-1;-1;-1;-1;-1;-1;-1"
+                    "compander_enable" to "true", "compander_timeconstant" to "0.22", "compander_granularity" to "1", "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.15;-0.15;-0.15;-0.15;-0.15;-0.15;-0.15"
                 ),
                 Constants.PREF_TUBE to mapOf("tube_enable" to "false"),
                 Constants.PREF_BASS to mapOf("bass_enable" to "false"),
@@ -547,8 +598,8 @@ object BuiltInPresets {
                     "peq_bands" to "PEQ: 60.0 0.0 0.71 1; 800.0 1.5 1.00 0; 2500.0 2.0 1.20 0; "
                 ),
                 Constants.PREF_COMPANDER to mapOf(
-                    "compander_enable" to "true", "compander_timeconstant" to "0.10", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-3;-2;-1;-1;-1;-2;-2"
+                    "compander_enable" to "true", "compander_timeconstant" to "0.10", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.35;-0.25;-0.15;0.10;0.15;-0.20;-0.25"
                 ),
                 Constants.PREF_BASS to mapOf("bass_enable" to "true", "bass_max_gain" to "5"),
                 Constants.PREF_TUBE to mapOf("tube_enable" to "false"),
@@ -569,8 +620,8 @@ object BuiltInPresets {
                 Constants.PREF_LIVEPROG to mapOf("liveprog_enable" to "true", "liveprog_file" to "Liveprog/Joe0Bloggs DRX10K compander-HR.eel"),
                 Constants.PREF_CROSSFEED to mapOf("bs2b_crossfeed_enable" to "true", "bs2b_crossfeed_mode" to "0"),
                 Constants.PREF_COMPANDER to mapOf(
-                    "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "0",
-                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-4;-3;-2;-2;-2;-3;-3"
+                    "compander_enable" to "true", "compander_timeconstant" to "0.15", "compander_granularity" to "2", "compander_tftransforms" to "3",
+                    "compander_response" to "95.0;200.0;400.0;800.0;1600.0;3400.0;7500.0;-0.50;-0.40;-0.30;-0.25;-0.25;-0.35;-0.40"
                 ),
                 Constants.PREF_BASS to mapOf("bass_enable" to "false"),
                 Constants.PREF_TUBE to mapOf("tube_enable" to "false"),
@@ -650,6 +701,7 @@ object BuiltInPresets {
     private fun isFloatKey(key: String): Boolean {
         return key == "bass_max_gain" || key == "tube_drive" || key == "stereowide_mode" ||
                 key == "compander_timeconstant" || key == "compander_granularity" ||
-                key == "limiter_threshold" || key == "limiter_release" || key == "output_postgain"
+                key == "limiter_threshold" || key == "limiter_release" || key == "output_postgain" ||
+                key == "peq_preamp" || key.startsWith("slider")
     }
 }

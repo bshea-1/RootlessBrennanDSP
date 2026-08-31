@@ -90,9 +90,17 @@ class ParametricEqualizerPreference : Preference {
         val bands = ParametricEqBandList()
         bands.deserialize(value)
 
-        val preampDb = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
-            .getFloat(context.getString(R.string.key_peq_preamp), 0f)
-            .toDouble()
+        val peqPrefs = context.getSharedPreferences(Constants.PREF_PEQ, Context.MODE_PRIVATE)
+        val preampKey = context.getString(R.string.key_peq_preamp)
+        val preampDb = try {
+            peqPrefs.getFloat(preampKey, 0f).toDouble()
+        } catch (_: Throwable) {
+            try {
+                peqPrefs.getString(preampKey, "0")?.toDoubleOrNull() ?: 0.0
+            } catch (_: Throwable) {
+                0.0
+            }
+        }
 
         binding?.layoutEqualizer?.setBands(bands, preampDb)
         try {

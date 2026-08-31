@@ -15,7 +15,7 @@
     <bool name="default_is_app_compat_activity_active" translatable="false" tools:keep="@bool/default_is_app_compat_activity_active">false</bool>
 
     <!-- Internal DSP -->
-    <bool name="default_powered_on" translatable="false" tools:keep="@bool/default_powered_on">true</bool>
+    <bool name="default_powered_on" translatable="false" tools:keep="@bool/default_powered_on">false</bool>
     <string name="default_benchmark_c0" translatable="false" tools:keep="@string/default_benchmark_c0" />
     <string name="default_benchmark_c1" translatable="false" tools:keep="@string/default_benchmark_c0" />
 

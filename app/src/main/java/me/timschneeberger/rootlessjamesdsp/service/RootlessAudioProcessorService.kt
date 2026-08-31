@@ -522,7 +522,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             else -> AudioFormat.ENCODING_PCM_FLOAT
         }
 
-        val sampleRate = 48000
+        val sampleRate = determineSamplingRate()
         val frameSizeBytes = if (encoding == AudioEncoding.PcmShort) 2 * Short.SIZE_BYTES else 2 * Float.SIZE_BYTES
 
         // Chunk size: align with HAL burst for optimal scheduling (~4-5ms on Pixel)
@@ -844,13 +844,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         val attributesBuilder = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .setFlags(AudioAttributes.FLAG_LOW_LATENCY)
 
         sdkAbove(Build.VERSION_CODES.Q) {
             attributesBuilder.setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
         }
         sdkAbove(Build.VERSION_CODES.S) {
-            attributesBuilder.setSpatializationBehavior(AudioAttributes.SPATIALIZATION_BEHAVIOR_NEVER)
+            attributesBuilder.setSpatializationBehavior(AudioAttributes.SPATIALIZATION_BEHAVIOR_AUTO)
         }
         val format = AudioFormat.Builder()
             .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
@@ -876,7 +875,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             .setAudioFormat(format)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setAudioAttributes(attributesBuilder.build())
-            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_NONE)
             .setBufferSizeInBytes(bufferSize)
             .build()
     }

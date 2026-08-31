@@ -109,6 +109,7 @@ object EffectPresetManager {
     private fun isFloatKey(key: String): Boolean {
         return key == "bass_max_gain" || key == "tube_drive" || key == "stereowide_mode" ||
                 key == "compander_timeconstant" || key == "compander_granularity" ||
-                key == "limiter_threshold" || key == "limiter_release" || key == "output_postgain"
+                key == "limiter_threshold" || key == "limiter_release" || key == "output_postgain" ||
+                key == "peq_preamp" || key.startsWith("slider")
     }
 }

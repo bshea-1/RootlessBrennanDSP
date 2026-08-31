@@ -170,6 +170,21 @@ class MainActivity : BaseActivity() {
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
 
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.bar) { view, insets ->
+            val navBars = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars() or 
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+            )
+            androidx.core.view.ViewCompat.getRootWindowInsets(view)?.let { _ ->
+                val padBottom = maxOf(navBars.bottom, (14 * resources.displayMetrics.density).toInt())
+                view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, padBottom)
+            } ?: run {
+                val padBottom = maxOf(navBars.bottom, (14 * resources.displayMetrics.density).toInt())
+                view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, padBottom)
+            }
+            insets
+        }
+
         actionBar?.setDisplayHomeAsUpEnabled(true)
         actionBar?.setHomeButtonEnabled(true)
         actionBar?.setDisplayShowTitleEnabled(true)
@@ -436,7 +451,7 @@ class MainActivity : BaseActivity() {
         prefsVar.set(R.string.key_is_activity_active, true)
 
         if(isRootless())
-            binding.powerToggle.isToggled = processorService != null
+            binding.powerToggle.isToggled = prefsApp.get<Boolean>(R.string.key_powered_on)
 
         try {
             if (rikka.shizuku.Shizuku.pingBinder()) {
@@ -767,25 +782,7 @@ class MainActivity : BaseActivity() {
     }
 
     private fun playSwitchFeedback(isOn: Boolean) {
-        try {
-            val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 40)
-            if (isOn) {
-                toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 70)
-            } else {
-                toneGen.startTone(ToneGenerator.TONE_PROP_NACK, 70)
-            }
-            java.util.Timer().schedule(object : java.util.TimerTask() {
-                override fun run() {
-                    try {
-                        toneGen.release()
-                    } catch (_: Exception) {}
-                }
-            }, 120)
-        } catch (_: Exception) {}
-
-        makeSnackbar(
-            if (isOn) "🎧 BrennanDSP Processing Enabled" else "⚪ BrennanDSP Passthrough (Off)"
-        ).show()
+        // Silent transition with zero popups
     }
 
     private fun quitGracefully() {

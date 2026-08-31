@@ -33,14 +33,31 @@ class Preferences(val context: Context) {
             val key = context.getString(nameRes)
             val defValue = default ?: getDefault(nameRes, type)
 
-            return when(type) {
-                Boolean::class -> preferences.getBoolean(key, defValue as Boolean) as T
-                String::class -> preferences.getString(key, defValue as String) as T
-                Int::class -> preferences.getInt(key, defValue as Int) as T
-                Long::class -> preferences.getLong(key, defValue as Long) as T
-                Float::class -> preferences.getFloat(key, defValue as Float) as T
-                else -> throw IllegalArgumentException("Unknown type ${type.qualifiedName}")
-            }.also {
+            val result: T = try {
+                when(type) {
+                    Boolean::class -> preferences.getBoolean(key, defValue as Boolean) as T
+                    String::class -> preferences.getString(key, defValue as String) as T
+                    Int::class -> preferences.getInt(key, defValue as Int) as T
+                    Long::class -> preferences.getLong(key, defValue as Long) as T
+                    Float::class -> preferences.getFloat(key, defValue as Float) as T
+                    else -> throw IllegalArgumentException("Unknown type ${type.qualifiedName}")
+                }
+            } catch (_: Throwable) {
+                try {
+                    when(type) {
+                        Boolean::class -> (preferences.getString(key, defValue.toString())?.toBooleanStrictOrNull() ?: (defValue as Boolean)) as T
+                        Float::class -> (preferences.getString(key, defValue.toString())?.toFloatOrNull() ?: (preferences.all[key]?.toString()?.toFloatOrNull() ?: (defValue as Float))) as T
+                        Int::class -> (preferences.getString(key, defValue.toString())?.toIntOrNull() ?: (preferences.all[key]?.toString()?.toIntOrNull() ?: (defValue as Int))) as T
+                        Long::class -> (preferences.getString(key, defValue.toString())?.toLongOrNull() ?: (preferences.all[key]?.toString()?.toLongOrNull() ?: (defValue as Long))) as T
+                        String::class -> (preferences.all[key]?.toString() ?: (defValue as String)) as T
+                        else -> defValue
+                    }
+                } catch (_: Throwable) {
+                    defValue
+                }
+            }
+
+            return result.also {
                 CrashlyticsImpl.setCustomKey("${namespace()}_$key", it.toString())
             }
         }

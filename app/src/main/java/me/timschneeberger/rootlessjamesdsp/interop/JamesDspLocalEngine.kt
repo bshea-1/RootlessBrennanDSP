@@ -26,7 +26,13 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             context.sendLocalBroadcast(Intent(Constants.ACTION_SAMPLE_RATE_UPDATED))
         }
         get() = super.sampleRate
-    override var enabled: Boolean = true
+    override var enabled: Boolean = false
+        set(value) {
+            field = value
+            if (!value && currentDspGain <= 0.001f) {
+                currentDspGain = 0.0f
+            }
+        }
 
     init {
         if(BenchmarkManager.hasBenchmarksCached())
@@ -50,7 +56,7 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     }
 
     @Volatile
-    private var currentDspGain = 1.0f
+    private var currentDspGain = if (enabled) 1.0f else 0.0f
 
     fun processDirectFloat(input: ByteBuffer, output: ByteBuffer, frameCount: Int) {
         val targetGain = if (enabled && handle != 0L && !isDisposed.get()) 1.0f else 0.0f
@@ -86,6 +92,8 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
         // Snappy, click-free crossfade interpolation between dry input and wet processed output (~4ms)
         val totalSamples = frameCount * 2
+        input.position(0)
+        output.position(0)
         val inFloat = input.asFloatBuffer()
         val outFloat = output.asFloatBuffer()
         val step = (targetGain - currentDspGain).coerceIn(-1.0f, 1.0f) / 384.0f
@@ -102,28 +110,49 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
             val wet = outFloat.get(i)
             outFloat.put(i, wet * currentDspGain + dry * (1.0f - currentDspGain))
         }
+        input.position(0)
+        output.position(0)
     }
 
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
-        if(!enabled || handle == 0L || isDisposed.get())
-        {
-            if(offset < 0 && length < 0) {
-                input.copyInto(output)
-            }
-            else {
-                input.copyInto(output, 0, offset, offset + length)
+        val targetGain = if (enabled && handle != 0L && !isDisposed.get()) 1.0f else 0.0f
+        val actualLength = if (length < 0) input.size else length
+        val actualOffset = if (offset < 0) 0 else offset
+
+        if (targetGain == 0.0f && currentDspGain <= 0.0001f) {
+            currentDspGain = 0.0f
+            input.copyInto(output, 0, actualOffset, actualOffset + actualLength)
+            return
+        }
+
+        synchronized(processLock) {
+            if (handle != 0L && !isDisposed.get()) {
+                JamesDspWrapper.processInt16(handle, input, output, offset, length)
+            } else {
+                input.copyInto(output, 0, actualOffset, actualOffset + actualLength)
+                currentDspGain = 0.0f
+                return
             }
         }
-        else {
-            synchronized(processLock) {
-                if (handle != 0L && !isDisposed.get()) {
-                    JamesDspWrapper.processInt16(handle, input, output, offset, length)
+
+        if (targetGain == 1.0f && currentDspGain >= 0.9999f) {
+            currentDspGain = 1.0f
+            return
+        }
+
+        val step = (targetGain - currentDspGain).coerceIn(-1.0f, 1.0f) / 384.0f
+        for (i in 0 until actualLength) {
+            if (currentDspGain != targetGain) {
+                if (targetGain > currentDspGain) {
+                    currentDspGain = (currentDspGain + kotlin.math.abs(step)).coerceAtMost(targetGain)
                 } else {
-                    if (offset < 0 && length < 0) input.copyInto(output)
-                    else input.copyInto(output, 0, offset, offset + length)
+                    currentDspGain = (currentDspGain - kotlin.math.abs(step)).coerceAtLeast(targetGain)
                 }
             }
+            val dry = input[actualOffset + i].toFloat()
+            val wet = output[i].toFloat()
+            output[i] = (wet * currentDspGain + dry * (1.0f - currentDspGain)).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
     }
 
@@ -152,24 +181,43 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
 
     fun processFloat(input: FloatArray, output: FloatArray, offset: Int = -1, length: Int = -1)
     {
-        if(!enabled || handle == 0L || isDisposed.get())
-        {
-            if(offset < 0 && length < 0) {
-                input.copyInto(output)
-            }
-            else {
-                input.copyInto(output, 0, offset, offset + length)
+        val targetGain = if (enabled && handle != 0L && !isDisposed.get()) 1.0f else 0.0f
+        val actualLength = if (length < 0) input.size else length
+        val actualOffset = if (offset < 0) 0 else offset
+
+        if (targetGain == 0.0f && currentDspGain <= 0.0001f) {
+            currentDspGain = 0.0f
+            input.copyInto(output, 0, actualOffset, actualOffset + actualLength)
+            return
+        }
+
+        synchronized(processLock) {
+            if (handle != 0L && !isDisposed.get()) {
+                JamesDspWrapper.processFloat(handle, input, output, offset, length)
+            } else {
+                input.copyInto(output, 0, actualOffset, actualOffset + actualLength)
+                currentDspGain = 0.0f
+                return
             }
         }
-        else {
-            synchronized(processLock) {
-                if (handle != 0L && !isDisposed.get()) {
-                    JamesDspWrapper.processFloat(handle, input, output, offset, length)
+
+        if (targetGain == 1.0f && currentDspGain >= 0.9999f) {
+            currentDspGain = 1.0f
+            return
+        }
+
+        val step = (targetGain - currentDspGain).coerceIn(-1.0f, 1.0f) / 384.0f
+        for (i in 0 until actualLength) {
+            if (currentDspGain != targetGain) {
+                if (targetGain > currentDspGain) {
+                    currentDspGain = (currentDspGain + kotlin.math.abs(step)).coerceAtMost(targetGain)
                 } else {
-                    if (offset < 0 && length < 0) input.copyInto(output)
-                    else input.copyInto(output, 0, offset, offset + length)
+                    currentDspGain = (currentDspGain - kotlin.math.abs(step)).coerceAtLeast(targetGain)
                 }
             }
+            val dry = input[actualOffset + i]
+            val wet = output[i]
+            output[i] = wet * currentDspGain + dry * (1.0f - currentDspGain)
         }
     }
 

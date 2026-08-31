@@ -244,7 +244,12 @@ class ParametricEqualizerFragment : Fragment() {
             bands.deserialize(bandString)
         }
 
-        val preampDb = prefs?.getFloat(getString(R.string.key_peq_preamp), 0f) ?: 0f
+        val preampKey = getString(R.string.key_peq_preamp)
+        val preampDb = try {
+            prefs?.getFloat(preampKey, 0f) ?: 0f
+        } catch (_: Throwable) {
+            prefs?.getString(preampKey, "0")?.toFloatOrNull() ?: 0f
+        }
         binding.preampInput.value = preampDb
         binding.equalizerSurface.setBands(bands, preampDb.toDouble())
 

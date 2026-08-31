@@ -17,7 +17,7 @@
             android:key="@string/key_bass_max_gain"
             android:title="@string/bass_max_gain"
             android:defaultValue="5"
-            app:minValue="3"
+            app:minValue="0"
             app:maxValue="15"
             app:unit="dB"
             app:allowDividerAbove="false"

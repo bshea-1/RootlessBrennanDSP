@@ -51,6 +51,22 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         requireContext().registerLocalReceiver(presetReceiver, IntentFilter(Constants.ACTION_PRESET_LOADED))
+
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.dspScrollview) { _, insets ->
+            val navBars = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+            )
+            val basePadding = (130 * resources.displayMetrics.density).toInt()
+            val totalBottomPadding = basePadding + navBars.bottom
+            binding.cardContainer.setPadding(
+                binding.cardContainer.paddingLeft,
+                binding.cardContainer.paddingTop,
+                binding.cardContainer.paddingRight,
+                totalBottomPadding
+            )
+            insets
+        }
     }
 
     override fun onDestroyView() {
