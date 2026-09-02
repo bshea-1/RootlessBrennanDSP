@@ -44,7 +44,7 @@ class SettingsAudioFormatFragment : SettingsBaseFragment() {
         encoding?.parent?.isVisible = isRootless()
         benchmark?.parent?.isVisible = !isRoot()
 
-        legacyMode?.parent?.isVisible = isRoot()
+        legacyMode?.isVisible = isRoot()
         legacyMode?.setOnPreferenceChangeListener { _, newValue ->
             if (!(newValue as Boolean))
                 requireContext().requestIgnoreBatteryOptimizations()

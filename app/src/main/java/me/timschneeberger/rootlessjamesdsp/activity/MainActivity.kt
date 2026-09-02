@@ -279,16 +279,19 @@ class MainActivity : BaseActivity() {
                 }
 
                 if(SdkCheck.isQ && isRootless()) {
-                    if (RootlessAudioProcessorService.isRunning || processorServiceBound || processorService != null) {
-                        val newToggled = !binding.powerToggle.isToggled
-                        binding.powerToggle.isToggled = newToggled
-                        prefsApp.set(R.string.key_powered_on, newToggled)
-                        playSwitchFeedback(newToggled)
+                    val willPowerOn = !binding.powerToggle.isToggled
+                    binding.powerToggle.isToggled = willPowerOn
+                    prefsApp.set(R.string.key_powered_on, willPowerOn)
+                    playSwitchFeedback(willPowerOn)
+
+                    if (!willPowerOn) {
+                        RootlessAudioProcessorService.stop(this@MainActivity)
                     } else {
-                        binding.powerToggle.isToggled = true
-                        prefsApp.set(R.string.key_powered_on, true)
-                        playSwitchFeedback(true)
-                        requestCapturePermission()
+                        if (RootlessAudioProcessorService.isRunning) {
+                            sendLocalBroadcast(Intent(Constants.ACTION_PREFERENCES_UPDATED))
+                        } else {
+                            requestCapturePermission()
+                        }
                     }
                 }
                 else if (isRoot()) {
@@ -323,9 +326,11 @@ class MainActivity : BaseActivity() {
                 if (result.resultCode == RESULT_OK && isRootless()) {
                     app.mediaProjectionStartIntent = result.data
                     binding.powerToggle.isToggled = true
+                    prefsApp.set(R.string.key_powered_on, true)
                     RootlessAudioProcessorService.start(this, result.data)
                 } else {
                     binding.powerToggle.isToggled = false
+                    prefsApp.set(R.string.key_powered_on, false)
                 }
             }
         }

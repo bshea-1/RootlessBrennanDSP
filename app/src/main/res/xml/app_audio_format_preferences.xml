@@ -23,7 +23,8 @@
             app:allowDividerAbove="false"
             app:updatesContinuously="false"
             app:showSeekBarValue="true"
-            app:iconSpaceReserved="false"/>
+            app:iconSpaceReserved="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -44,7 +45,6 @@
             android:title="@string/audio_format_enhanced_processing"
             android:summaryOff="@string/audio_format_enhanced_processing_off"
             android:summaryOn="@string/audio_format_enhanced_processing_on"
-            android:dependency="@string/key_audioformat_processing"
             app:iconSpaceReserved="false" />
 
         <Preference

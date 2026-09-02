@@ -250,7 +250,6 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         preferences.unregisterOnSharedPreferenceChangeListener(preferencesListener)
         notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
-        stopSelf()
         super.onDestroy()
     }
 
@@ -475,6 +474,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val isPoweredOn = preferences.get<Boolean>(R.string.key_powered_on)
                 Timber.d("RootlessAudioProcessorService: powered_on set to $isPoweredOn")
                 engine.enabled = isPoweredOn
+                if (!isPoweredOn && !isServiceDisposing) {
+                    stopSelf()
+                }
             }
             getString(R.string.key_powersave_suspend) -> {
                 suspendOnIdle = preferences.get<Boolean>(R.string.key_powersave_suspend)
@@ -577,6 +579,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
             recorder.startRecording()
 
+            // Drain any initial stale captured buffers before piping to consumer ring buffer
+            val discardBuffer = ByteBuffer.allocateDirect(bufferSizeBytes)
+            while (recorder.read(discardBuffer, bufferSizeBytes, AudioRecord.READ_NON_BLOCKING) > 0) {
+                // discard initial stale frames
+            }
+            ring.flush()
+
             while (!isProcessorDisposing) {
                 if (recreateRecorderRequested) {
                     Timber.d("Recreating AudioRecord due to permission grant")
@@ -630,7 +639,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
                 } else {
                     // Buffer is full (consumer delayed) -> trim oldest slots to enforce minimal latency
-                    ring.trimToWatermark(2)
+                    ring.trimToWatermark(4)
                 }
             }
 
@@ -655,8 +664,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             val shortBuffer = ShortArray(bufferElements)
             val shortOutBuffer = ShortArray(bufferElements)
 
-            // Fade-in ramp: 30ms worth of stereo samples for smooth transition
-            val totalFadeInSamples = (sampleRate * 0.030).toInt() * 2
+            // Fade-in ramp: 50ms worth of stereo samples for smooth, seamless transition
+            val totalFadeInSamples = (sampleRate * 0.050).toInt() * 2
             var fadeInSamplesRemaining = totalFadeInSamples
             var processedChunkCount = 0L
             var preRolled = false
@@ -779,7 +788,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 processedChunkCount++
 
                 // Dynamic Clock Drift Monitoring: only shed frames if backlog grows excessively (>6 chunks = >25ms)
-                if ((processedChunkCount and 63L) == 0L) {
+                // Skip startup window (first 256 chunks ~1 sec) so startup buffering is smooth and never skips audio
+                if (processedChunkCount > 256L && (processedChunkCount and 63L) == 0L) {
                     val depth = ring.availableToRead()
                     if (depth > 6) {
                         val trimmed = ring.trimToWatermark(3)
@@ -811,8 +821,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         captureThread?.interrupt()
         playbackThread?.interrupt()
         try {
-            captureThread?.join(300)
-            playbackThread?.join(300)
+            captureThread?.join(100)
+            playbackThread?.join(100)
         } catch (_: Exception) {}
         captureThread = null
         playbackThread = null
@@ -849,7 +859,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             attributesBuilder.setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
         }
         sdkAbove(Build.VERSION_CODES.S) {
-            attributesBuilder.setSpatializationBehavior(AudioAttributes.SPATIALIZATION_BEHAVIOR_AUTO)
+            // Always disable system spatializer for bit-perfect DSP output
+            attributesBuilder.setSpatializationBehavior(AudioAttributes.SPATIALIZATION_BEHAVIOR_NEVER)
         }
         val format = AudioFormat.Builder()
             .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
@@ -971,7 +982,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         fun stop(context: Context) {
             try {
-                context.startForegroundService(ServiceNotificationHelper.createStopIntent(context))
+                context.stopService(Intent(context, RootlessAudioProcessorService::class.java))
             }
             catch(ex: Exception) {
                 CrashlyticsImpl.recordException(ex)
